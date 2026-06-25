@@ -380,10 +380,6 @@
   <div id="tab-invoice" class="section">
     <div class="section-heading" style="margin-bottom:14px;">Upload invoice</div>
 
-    <div class="upload-hint">
-      📄 Paste the invoice text below, or type the line items manually. The AI will read it and match each item to your inventory.
-    </div>
-
     <div class="card">
       <div class="row2" style="margin-bottom:12px;">
         <div class="field">
@@ -395,11 +391,36 @@
           <input id="inv-date" type="date" />
         </div>
       </div>
-      <div class="field">
-        <label>Invoice contents</label>
-        <textarea id="inv-text" placeholder="Paste or type the invoice items here, e.g.:&#10;&#10;Bread flour 50lb bag x4 @ $18.50&#10;Cream cheese 3lb tub x6 @ $9.25&#10;Sesame seeds 5lb x2 @ $12.00"></textarea>
+
+      <!-- Input mode toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="btn btn-sm mode-btn active" id="mode-photo-btn" onclick="setMode('photo')" style="flex:1;justify-content:center;">📷 Photo</button>
+        <button class="btn btn-sm mode-btn" id="mode-text-btn" onclick="setMode('text')" style="flex:1;justify-content:center;">⌨️ Type / paste</button>
       </div>
-      <button class="btn btn-primary btn-full" onclick="processInvoice()">✨ Read with AI</button>
+
+      <!-- Photo mode -->
+      <div id="mode-photo">
+        <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoSelected(event)" />
+        <div id="photo-drop-area" onclick="document.getElementById('photo-input').click()" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;color:var(--text2);margin-bottom:12px;transition:border-color 0.15s;">
+          <div style="font-size:36px;margin-bottom:8px;">📸</div>
+          <div style="font-weight:600;color:var(--text);margin-bottom:4px;">Tap to take a photo or choose from library</div>
+          <div style="font-size:13px;">Works with printed or handwritten invoices</div>
+        </div>
+        <div id="photo-preview-wrap" style="display:none;margin-bottom:12px;">
+          <img id="photo-preview" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);max-height:260px;object-fit:cover;" />
+          <button class="btn btn-ghost btn-sm" onclick="clearPhoto()" style="margin-top:6px;">✕ Remove photo</button>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="processInvoice()">✨ Read invoice with AI</button>
+      </div>
+
+      <!-- Text mode -->
+      <div id="mode-text" style="display:none;">
+        <div class="field">
+          <label>Invoice contents</label>
+          <textarea id="inv-text" placeholder="Paste or type the invoice items here, e.g.:&#10;&#10;Bread flour 50lb bag x4 @ $18.50&#10;Cream cheese 3lb tub x6 @ $9.25&#10;Sesame seeds 5lb x2 @ $12.00"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="processInvoice()">✨ Read with AI</button>
+      </div>
     </div>
 
     <div id="ai-processing" class="card" style="display:none;">
@@ -593,13 +614,65 @@ function removeItem(id) {
 }
 
 /* ---- INVOICE ---- */
+let currentMode = 'photo';
+let selectedImageBase64 = null;
+let selectedImageType = 'image/jpeg';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-photo').style.display = mode === 'photo' ? 'block' : 'none';
+  document.getElementById('mode-text').style.display = mode === 'text' ? 'block' : 'none';
+  document.getElementById('mode-photo-btn').classList.toggle('active', mode === 'photo');
+  document.getElementById('mode-text-btn').classList.toggle('active', mode === 'text');
+  // style active mode button
+  ['mode-photo-btn','mode-text-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.classList.contains('active')) {
+      el.style.background = 'var(--accent)';
+      el.style.color = 'white';
+      el.style.borderColor = 'var(--accent)';
+    } else {
+      el.style.background = '';
+      el.style.color = '';
+      el.style.borderColor = '';
+    }
+  });
+}
+
+function handlePhotoSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  selectedImageType = file.type || 'image/jpeg';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    selectedImageBase64 = dataUrl.split(',')[1];
+    document.getElementById('photo-preview').src = dataUrl;
+    document.getElementById('photo-preview-wrap').style.display = 'block';
+    document.getElementById('photo-drop-area').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearPhoto() {
+  selectedImageBase64 = null;
+  document.getElementById('photo-input').value = '';
+  document.getElementById('photo-preview-wrap').style.display = 'none';
+  document.getElementById('photo-drop-area').style.display = 'block';
+}
+
 async function processInvoice() {
   const vendor = document.getElementById('inv-vendor').value.trim();
   const date = document.getElementById('inv-date').value;
-  const text = document.getElementById('inv-text').value.trim();
   if (!vendor) { alert('Please enter the vendor name.'); return; }
   if (!date) { alert('Please select the invoice date.'); return; }
-  if (!text) { alert('Please paste or type the invoice contents.'); return; }
+
+  if (currentMode === 'photo' && !selectedImageBase64) {
+    alert('Please take or choose a photo of the invoice first.'); return;
+  }
+  if (currentMode === 'text' && !document.getElementById('inv-text').value.trim()) {
+    alert('Please paste or type the invoice contents.'); return;
+  }
 
   pendingVendor = vendor;
   pendingDate = date;
@@ -609,16 +682,14 @@ async function processInvoice() {
 
   const inventoryList = state.inventory.map(i => `- ID:${i.id} "${i.name}" (${i.category}, per ${i.unit})`).join('\n');
 
-  const prompt = `You are a food service inventory assistant for a bagel shop.
+  const promptText = `You are a food service inventory assistant for a bagel shop.
 
 Inventory items:
 ${inventoryList}
 
 Vendor: ${vendor}
-Invoice:
-${text}
 
-Parse each line item. Match each to the best inventory item ID. If no match exists, use inventoryId: null.
+Read the invoice carefully and parse every line item. Match each to the best inventory item ID. If no match, use inventoryId: null.
 
 Respond ONLY with a valid JSON array, no explanation or markdown:
 [{"lineText":"original text","inventoryId":1,"itemName":"Bread flour","qty":4,"unit":"lb","unitPrice":18.50,"total":74.00,"confidence":"high"}]
@@ -626,13 +697,24 @@ Respond ONLY with a valid JSON array, no explanation or markdown:
 confidence: "high", "medium", or "low". unitPrice and total as numbers.`;
 
   try {
+    let messageContent;
+    if (currentMode === 'photo') {
+      messageContent = [
+        { type: 'image', source: { type: 'base64', media_type: selectedImageType, data: selectedImageBase64 } },
+        { type: 'text', text: promptText }
+      ];
+    } else {
+      const text = document.getElementById('inv-text').value.trim();
+      messageContent = `${promptText}\n\nInvoice text:\n${text}`;
+    }
+
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content: messageContent }]
       })
     });
     const data = await res.json();
@@ -642,7 +724,7 @@ confidence: "high", "medium", or "low". unitPrice and total as numbers.`;
     renderAIOutput();
   } catch(e) {
     document.getElementById('ai-processing').style.display = 'none';
-    alert('Could not read the invoice. Please check the text and try again.');
+    alert('Could not read the invoice. Please try again.');
   }
 }
 
@@ -695,6 +777,7 @@ function saveInvoice() {
   document.getElementById('inv-vendor').value = '';
   document.getElementById('inv-date').value = '';
   document.getElementById('inv-text').value = '';
+  clearPhoto();
   toast('Invoice saved ✓');
 }
 
@@ -829,7 +912,7 @@ function renderVendorTotals() {
 /* ---- INIT ---- */
 load();
 renderInventory();
-
+setMode('photo');
 // Set today's date as default
 document.getElementById('inv-date').valueAsDate = new Date();
 </script>
