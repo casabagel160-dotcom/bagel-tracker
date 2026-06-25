@@ -328,7 +328,11 @@
   <div id="tab-inventory" class="section active">
     <div class="section-header">
       <div class="section-heading">Inventory</div>
-      <button class="btn btn-primary btn-sm" onclick="toggleAddForm()">+ Add item</button>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm" onclick="document.getElementById('csv-file-input').click()">📥 Import CSV</button>
+        <input type="file" id="csv-file-input" accept=".csv" style="display:none;" onchange="importCSV(event)" />
+        <button class="btn btn-primary btn-sm" onclick="toggleAddForm()">+ Add item</button>
+      </div>
     </div>
 
     <div id="add-form" class="card" style="display:none;">
@@ -343,10 +347,12 @@
           <select id="new-cat">
             <option>Flour &amp; grains</option>
             <option>Dairy</option>
-            <option>Proteins</option>
+            <option>Meats</option>
             <option>Produce</option>
             <option>Oils &amp; fats</option>
             <option>Seasonings</option>
+            <option>Beverages</option>
+            <option>Snacks</option>
             <option>Packaging</option>
             <option>Other</option>
           </select>
@@ -362,6 +368,10 @@
             <option>each</option>
             <option>box</option>
             <option>tub</option>
+            <option>bottle</option>
+            <option>can</option>
+            <option>pack</option>
+            <option>carton</option>
           </select>
         </div>
       </div>
@@ -373,6 +383,26 @@
 
     <div class="card" id="inventory-card">
       <div id="inventory-list"></div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);text-align:center;padding:4px 0 8px;">
+      CSV format: <code>name, category, unit</code> (one item per row, no header required)
+    </div>
+  </div>
+
+  <!-- TRENDS -->
+  <div id="tab-trends" class="section">
+    <div class="section-heading" style="margin-bottom:14px;">📈 Core 4 Weekly Trends</div>
+    <div class="card">
+      <div class="card-title">Average weekly order quantity — Bacon, Eggs, Cream Cheese, Flour</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Tracks how much of each core ingredient you order week over week.</div>
+      <div id="trends-chart-wrap">
+        <canvas id="trends-canvas" style="width:100%;max-height:260px;"></canvas>
+      </div>
+    </div>
+    <div id="core4-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;"></div>
+    <div class="card">
+      <div class="card-title">Weekly breakdown</div>
+      <div id="trends-table"></div>
     </div>
   </div>
 
@@ -493,6 +523,10 @@
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     History
   </button>
+  <button class="nav-btn" onclick="showTab('trends', this)" aria-label="Core 4 Trends">
+    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Trends
+  </button>
   <button class="nav-btn" onclick="showTab('compare', this)" aria-label="Compare vendors">
     <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Compare
@@ -510,21 +544,35 @@ let state = {
     { id: 2, name: 'Cream cheese', category: 'Dairy', unit: 'tub' },
     { id: 3, name: 'Sesame seeds', category: 'Seasonings', unit: 'lb' },
     { id: 4, name: 'Everything bagel seasoning', category: 'Seasonings', unit: 'lb' },
-    { id: 5, name: 'Lox / smoked salmon', category: 'Proteins', unit: 'lb' },
+    { id: 5, name: 'Lox / smoked salmon', category: 'Meats', unit: 'lb' },
     { id: 6, name: 'Butter', category: 'Dairy', unit: 'lb' },
     { id: 7, name: 'Paper bags', category: 'Packaging', unit: 'case' },
+    { id: 8, name: 'Bacon', category: 'Meats', unit: 'lb' },
+    { id: 9, name: 'Eggs', category: 'Dairy', unit: 'carton' },
   ],
   purchases: [
-    { id: 1, date: '2025-11-10', vendor: 'Sysco', itemId: 1, itemName: 'Bread flour', qty: 4, unit: 'lb', unitPrice: 18.50, total: 74.00 },
-    { id: 2, date: '2025-11-10', vendor: 'Sysco', itemId: 2, itemName: 'Cream cheese', qty: 6, unit: 'tub', unitPrice: 9.25, total: 55.50 },
-    { id: 3, date: '2025-12-01', vendor: 'US Foods', itemId: 1, itemName: 'Bread flour', qty: 4, unit: 'lb', unitPrice: 17.80, total: 71.20 },
-    { id: 4, date: '2025-12-01', vendor: 'US Foods', itemId: 5, itemName: 'Lox / smoked salmon', qty: 5, unit: 'lb', unitPrice: 22.00, total: 110.00 },
-    { id: 5, date: '2026-01-15', vendor: 'Sysco', itemId: 1, itemName: 'Bread flour', qty: 5, unit: 'lb', unitPrice: 19.10, total: 95.50 },
-    { id: 6, date: '2026-01-15', vendor: 'Sysco', itemId: 3, itemName: 'Sesame seeds', qty: 2, unit: 'lb', unitPrice: 12.00, total: 24.00 },
-    { id: 7, date: '2026-02-20', vendor: 'Local Farm Co.', itemId: 5, itemName: 'Lox / smoked salmon', qty: 3, unit: 'lb', unitPrice: 19.50, total: 58.50 },
-    { id: 8, date: '2026-03-05', vendor: 'US Foods', itemId: 2, itemName: 'Cream cheese', qty: 8, unit: 'tub', unitPrice: 9.80, total: 78.40 },
+    { id: 1,  date: '2025-11-10', vendor: 'Sysco',          itemId: 1, itemName: 'Bread flour',       qty: 4,  unit: 'lb',     unitPrice: 18.50, total: 74.00 },
+    { id: 2,  date: '2025-11-10', vendor: 'Sysco',          itemId: 2, itemName: 'Cream cheese',      qty: 6,  unit: 'tub',    unitPrice: 9.25,  total: 55.50 },
+    { id: 3,  date: '2025-11-10', vendor: 'Sysco',          itemId: 8, itemName: 'Bacon',             qty: 10, unit: 'lb',     unitPrice: 6.50,  total: 65.00 },
+    { id: 4,  date: '2025-11-10', vendor: 'Sysco',          itemId: 9, itemName: 'Eggs',              qty: 5,  unit: 'carton', unitPrice: 4.80,  total: 24.00 },
+    { id: 5,  date: '2025-12-01', vendor: 'US Foods',       itemId: 1, itemName: 'Bread flour',       qty: 4,  unit: 'lb',     unitPrice: 17.80, total: 71.20 },
+    { id: 6,  date: '2025-12-01', vendor: 'US Foods',       itemId: 5, itemName: 'Lox / smoked salmon', qty: 5, unit: 'lb',   unitPrice: 22.00, total: 110.00 },
+    { id: 7,  date: '2025-12-01', vendor: 'US Foods',       itemId: 8, itemName: 'Bacon',             qty: 12, unit: 'lb',     unitPrice: 6.20,  total: 74.40 },
+    { id: 8,  date: '2025-12-01', vendor: 'US Foods',       itemId: 9, itemName: 'Eggs',              qty: 6,  unit: 'carton', unitPrice: 4.90,  total: 29.40 },
+    { id: 9,  date: '2026-01-15', vendor: 'Sysco',          itemId: 1, itemName: 'Bread flour',       qty: 5,  unit: 'lb',     unitPrice: 19.10, total: 95.50 },
+    { id: 10, date: '2026-01-15', vendor: 'Sysco',          itemId: 3, itemName: 'Sesame seeds',      qty: 2,  unit: 'lb',     unitPrice: 12.00, total: 24.00 },
+    { id: 11, date: '2026-01-15', vendor: 'Sysco',          itemId: 2, itemName: 'Cream cheese',      qty: 8,  unit: 'tub',    unitPrice: 9.00,  total: 72.00 },
+    { id: 12, date: '2026-01-15', vendor: 'Sysco',          itemId: 8, itemName: 'Bacon',             qty: 14, unit: 'lb',     unitPrice: 6.80,  total: 95.20 },
+    { id: 13, date: '2026-01-15', vendor: 'Sysco',          itemId: 9, itemName: 'Eggs',              qty: 8,  unit: 'carton', unitPrice: 5.10,  total: 40.80 },
+    { id: 14, date: '2026-02-20', vendor: 'Local Farm Co.', itemId: 5, itemName: 'Lox / smoked salmon', qty: 3, unit: 'lb',   unitPrice: 19.50, total: 58.50 },
+    { id: 15, date: '2026-02-20', vendor: 'Local Farm Co.', itemId: 8, itemName: 'Bacon',             qty: 11, unit: 'lb',     unitPrice: 6.40,  total: 70.40 },
+    { id: 16, date: '2026-02-20', vendor: 'Local Farm Co.', itemId: 9, itemName: 'Eggs',              qty: 7,  unit: 'carton', unitPrice: 4.75,  total: 33.25 },
+    { id: 17, date: '2026-03-05', vendor: 'US Foods',       itemId: 2, itemName: 'Cream cheese',      qty: 8,  unit: 'tub',    unitPrice: 9.80,  total: 78.40 },
+    { id: 18, date: '2026-03-05', vendor: 'US Foods',       itemId: 1, itemName: 'Bread flour',       qty: 6,  unit: 'lb',     unitPrice: 19.50, total: 117.00 },
+    { id: 19, date: '2026-03-05', vendor: 'US Foods',       itemId: 8, itemName: 'Bacon',             qty: 15, unit: 'lb',     unitPrice: 7.00,  total: 105.00 },
+    { id: 20, date: '2026-03-05', vendor: 'US Foods',       itemId: 9, itemName: 'Eggs',              qty: 9,  unit: 'carton', unitPrice: 5.20,  total: 46.80 },
   ],
-  nextId: 9
+  nextId: 21
 };
 
 let pendingLines = [];
@@ -556,6 +604,7 @@ function showTab(name, btn) {
   if (btn) btn.classList.add('active');
   if (name === 'history') renderHistory();
   if (name === 'compare') renderCompare();
+  if (name === 'trends') renderTrends();
 }
 
 /* ---- INVENTORY ---- */
@@ -907,6 +956,172 @@ function renderVendorTotals() {
       <div class="vendor-total">$${s.total.toFixed(2)}</div>
     </div>
   `).join('');
+}
+
+/* ---- CSV IMPORT ---- */
+function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
+    let added = 0, skipped = 0;
+    lines.forEach(line => {
+      // Skip header row if it looks like one
+      if (/^name\s*,/i.test(line)) return;
+      const parts = line.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+      const [name, category, unit] = parts;
+      if (!name) { skipped++; return; }
+      const validCats = ['Flour & grains','Dairy','Meats','Produce','Oils & fats','Seasonings','Beverages','Snacks','Packaging','Other'];
+      const validUnits = ['lb','oz','case','bag','gallon','each','box','tub','bottle','can','pack','carton'];
+      state.inventory.push({
+        id: Date.now() + added,
+        name,
+        category: validCats.includes(category) ? category : 'Other',
+        unit: validUnits.includes(unit) ? unit : 'each'
+      });
+      added++;
+    });
+    document.getElementById('csv-file-input').value = '';
+    save();
+    renderInventory();
+    toast(`Imported ${added} item${added !== 1 ? 's' : ''}${skipped ? ` (${skipped} skipped)` : ''} ✓`);
+  };
+  reader.readAsText(file);
+}
+
+/* ---- TRENDS (Core 4) ---- */
+const CORE4 = [
+  { key: 'bacon',       label: 'Bacon',       color: '#c0392b', keywords: ['bacon'] },
+  { key: 'eggs',        label: 'Eggs',         color: '#e67e22', keywords: ['egg'] },
+  { key: 'creamcheese', label: 'Cream Cheese', color: '#8e44ad', keywords: ['cream cheese','creamcheese'] },
+  { key: 'flour',       label: 'Flour',        color: '#2980b9', keywords: ['flour'] },
+];
+
+function matchCore4(itemName) {
+  const lower = (itemName || '').toLowerCase();
+  return CORE4.find(c => c.keywords.some(kw => lower.includes(kw))) || null;
+}
+
+function getWeekKey(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay(); // 0=Sun
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((day + 6) % 7));
+  return monday.toISOString().slice(0,10);
+}
+
+function renderTrends() {
+  // Build week → core4 qty map
+  const weekMap = {}; // { weekKey: { bacon: qty, eggs: qty, ... } }
+  state.purchases.forEach(p => {
+    const core = matchCore4(p.itemName);
+    if (!core) return;
+    const wk = getWeekKey(p.date);
+    if (!weekMap[wk]) weekMap[wk] = {};
+    weekMap[wk][core.key] = (weekMap[wk][core.key] || 0) + p.qty;
+  });
+
+  const weeks = Object.keys(weekMap).sort();
+
+  // Summary cards
+  const cardsEl = document.getElementById('core4-cards');
+  if (!weeks.length) {
+    cardsEl.innerHTML = '';
+    document.getElementById('trends-table').innerHTML = '<div class="empty"><div class="empty-icon">📈</div>No Core 4 purchase data yet. Add invoices containing Bacon, Eggs, Cream Cheese, or Flour.</div>';
+    document.getElementById('trends-chart-wrap').innerHTML = '';
+    return;
+  }
+
+  cardsEl.innerHTML = CORE4.map(c => {
+    const totals = weeks.map(wk => weekMap[wk][c.key] || 0);
+    const avg = totals.length ? (totals.reduce((a,b)=>a+b,0) / totals.length).toFixed(1) : '—';
+    const last = totals[totals.length - 1] || 0;
+    const prev = totals.length > 1 ? totals[totals.length - 2] : null;
+    let trend = '';
+    if (prev !== null) {
+      trend = last > prev ? '<span class="trend-up">▲ up</span>' : last < prev ? '<span class="trend-down">▼ down</span>' : '<span style="color:var(--text3)">— flat</span>';
+    }
+    return `<div class="metric" style="border-left:3px solid ${c.color};">
+      <div class="metric-val" style="color:${c.color}">${avg}</div>
+      <div class="metric-label">${c.label}</div>
+      <div style="font-size:11px;margin-top:3px;">${trend} vs last wk</div>
+    </div>`;
+  }).join('');
+
+  // Canvas chart (simple SVG bar chart — no library needed)
+  const canvasWrap = document.getElementById('trends-chart-wrap');
+  const chartW = Math.min(640, window.innerWidth - 52);
+  const chartH = 220;
+  const padL = 40, padR = 12, padT = 16, padB = 36;
+  const innerW = chartW - padL - padR;
+  const innerH = chartH - padT - padB;
+
+  // Find max value
+  let maxQty = 1;
+  weeks.forEach(wk => CORE4.forEach(c => { maxQty = Math.max(maxQty, weekMap[wk][c.key] || 0); }));
+
+  const barGroupW = innerW / weeks.length;
+  const barW = Math.max(3, Math.min(14, (barGroupW - 4) / CORE4.length));
+
+  let bars = '';
+  weeks.forEach((wk, wi) => {
+    CORE4.forEach((c, ci) => {
+      const qty = weekMap[wk][c.key] || 0;
+      if (!qty) return;
+      const bh = (qty / maxQty) * innerH;
+      const bx = padL + wi * barGroupW + ci * (barW + 1.5) + 2;
+      const by = padT + innerH - bh;
+      bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW}" height="${bh.toFixed(1)}" fill="${c.color}" rx="2" opacity="0.85"><title>${c.label}: ${qty} units (week of ${wk})</title></rect>`;
+    });
+  });
+
+  // X axis labels (abbreviated week dates)
+  const xLabels = weeks.map((wk, wi) => {
+    const cx = padL + wi * barGroupW + barGroupW / 2;
+    const short = wk.slice(5); // MM-DD
+    return `<text x="${cx.toFixed(1)}" y="${chartH - 6}" text-anchor="middle" font-size="9" fill="var(--text3)">${short}</text>`;
+  }).join('');
+
+  // Y axis ticks
+  let yTicks = '';
+  const ticks = [0, 0.25, 0.5, 0.75, 1.0];
+  ticks.forEach(t => {
+    const y = padT + innerH - t * innerH;
+    const val = Math.round(t * maxQty);
+    yTicks += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${padL + innerW}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`;
+    yTicks += `<text x="${padL - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text3)">${val}</text>`;
+  });
+
+  // Legend
+  const legendItems = CORE4.map((c, i) =>
+    `<g transform="translate(${i * 90}, 0)"><rect width="10" height="10" fill="${c.color}" rx="2"/><text x="14" y="9" font-size="10" fill="var(--text2)">${c.label}</text></g>`
+  ).join('');
+  const legendY = chartH + 18;
+
+  const svgH = legendY + 18;
+  canvasWrap.innerHTML = `<svg viewBox="0 0 ${chartW} ${svgH}" style="width:100%;overflow:visible;" xmlns="http://www.w3.org/2000/svg">
+    ${yTicks}
+    ${bars}
+    ${xLabels}
+    <g transform="translate(${padL}, ${legendY})">${legendItems}</g>
+  </svg>`;
+
+  // Weekly table
+  const tableEl = document.getElementById('trends-table');
+  const header = `<div style="display:grid;grid-template-columns:90px repeat(4,1fr);gap:4px;font-size:11px;font-weight:700;color:var(--text2);padding:6px 0;border-bottom:1px solid var(--border);">
+    <div>Week of</div>${CORE4.map(c=>`<div style="color:${c.color}">${c.label}</div>`).join('')}
+  </div>`;
+  const rows = [...weeks].reverse().map(wk => {
+    const cells = CORE4.map(c => {
+      const qty = weekMap[wk][c.key] || 0;
+      return `<div style="font-size:13px;">${qty ? qty : '<span style="color:var(--text3)">—</span>'}</div>`;
+    }).join('');
+    return `<div style="display:grid;grid-template-columns:90px repeat(4,1fr);gap:4px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center;">
+      <div style="font-size:12px;color:var(--text2);">${wk.slice(5)}</div>${cells}
+    </div>`;
+  }).join('');
+  tableEl.innerHTML = header + rows;
 }
 
 /* ---- INIT ---- */
